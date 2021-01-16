@@ -26,6 +26,12 @@ export {
 
 export * from "./server-mock";
 export const isServer = false;
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+function createElement(tagName: string, isSVG = false): HTMLElement|SVGElement {
+  return isSVG ? document.createElement(tagName) :
+                 document.createElementNS(SVG_NAMESPACE, tagName);
+}
 
 export function Portal(props: {
   mount?: Node;
@@ -56,9 +62,7 @@ export function Portal(props: {
       else cleanup();
     });
   } else {
-    const container = props.isSVG
-        ? document.createElementNS("http://www.w3.org/2000/svg", "g")
-        : document.createElement("div"),
+    const container = createElement(props.isSVG ? "g" : "div", props.isSVG),
       renderRoot =
         useShadow && container.attachShadow ? container.attachShadow({ mode: "open" }) : container;
 
@@ -75,21 +79,26 @@ export function Portal(props: {
   return marker;
 }
 
-export function Dynamic<T>(
-  props: T & { children?: any; component?: Component<T> | string | keyof JSX.IntrinsicElements }
-): () => JSX.Element {
-  const [p, others] = splitProps(props, ["component"]);
-  return createMemo(() => {
-    const comp = p.component,
-      t = typeof comp;
+type DynamicProps<T> = T&{
+  children?: any;
+  component?: Component<T>|string|keyof JSX.IntrinsicElements;
+  isSVG?: boolean;
+};
 
-    if (comp) {
-      if (t === "function") return untrack(() => (comp as Function)(others as any));
-      else if (t === "string") {
-        const el = document.createElement(comp as string);
-        spread(el, others);
+export function Dynamic<T>(props: DynamicProps<T>): () => JSX.Element {
+  const [p, others] = splitProps(props, ["component", "isSVG"]);
+  return createMemo(() => {
+    switch (p.component && typeof p.component) {
+      case "function":
+        return untrack(() => (p.component as Function)(others));
+
+      case "string":
+        const el = createElement(p.component as string, p.isSVG);
+        spread(el, others, p.isSVG);
         return el;
-      }
+
+      default:
+        break;
     }
   });
 }
